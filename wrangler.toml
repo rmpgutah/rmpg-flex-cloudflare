@@ -1,0 +1,34 @@
+name = "rmpg-flex-api"
+main = "src/index.ts"
+compatibility_date = "2026-05-01"
+compatibility_flags = ["nodejs_compat"]
+
+# D1 Database
+[[d1_databases]]
+binding = "DB"
+database_name = "rmpg-flex-db"
+database_id = "c4455d24-0190-405d-b80c-eceef7d0d499"
+
+# KV for sessions and caching
+[[kv_namespaces]]
+binding = "KV"
+id = "8e01c392038e4f76838ca9a1130c908e"
+preview_id = "8e01c392038e4f76838ca9a1130c908e"
+
+# R2 for file uploads (enable R2 at https://dash.cloudflare.com -> R2)
+# [[r2_buckets]]
+# binding = "R2"
+# bucket_name = "rmpg-flex-uploads"
+
+# Environment variables
+[vars]
+NODE_ENV = "production"
+PRIMARY_DOMAIN = "rmpgutah.us"
+CORS_ORIGINS = "https://rmpgutah.us,https://www.rmpgutah.us,http://localhost:5173"
+JWT_ACCESS_EXPIRY = "15m"
+JWT_REFRESH_EXPIRY = "7d"
+SERVER_TIMEZONE = "America/Denver"
+
+# Secrets (set via `npx wrangler secret put`)
+# JWT_SECRET (already set)
+# GOOGLE_MAPS_API_KEY

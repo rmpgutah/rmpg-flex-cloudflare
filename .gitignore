@@ -1,0 +1,4 @@
+node_modules/
+.cloudflare/
+*.log
+.wrangler/
