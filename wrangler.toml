@@ -15,10 +15,10 @@ binding = "KV"
 id = "8e01c392038e4f76838ca9a1130c908e"
 preview_id = "8e01c392038e4f76838ca9a1130c908e"
 
-# R2 for file uploads (enable R2 at https://dash.cloudflare.com -> R2)
-# [[r2_buckets]]
-# binding = "R2"
-# bucket_name = "rmpg-flex-uploads"
+# R2 buckets
+[[r2_buckets]]
+binding = "MAP_DATA"
+bucket_name = "system-essentials"
 
 # Environment variables
 [vars]
