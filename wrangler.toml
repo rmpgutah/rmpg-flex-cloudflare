@@ -7,7 +7,7 @@ compatibility_flags = ["nodejs_compat"]
 [[d1_databases]]
 binding = "DB"
 database_name = "rmpg-flex-db"
-database_id = "c4455d24-0190-405d-b80c-eceef7d0d499"
+database_id = "8893480a-6dd5-4790-a11f-1fb6fac13f02"
 
 # KV for sessions and caching
 [[kv_namespaces]]
