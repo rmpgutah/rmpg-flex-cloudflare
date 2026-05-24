@@ -3,6 +3,13 @@ main = "src/index.ts"
 compatibility_date = "2026-05-01"
 compatibility_flags = ["nodejs_compat"]
 
+# Custom domain. Wrangler provisions the DNS record + zone hostname
+# mapping; the zone (rmpgutah.us) must already be on this Cloudflare
+# account.
+[[routes]]
+pattern = "api.rmpgutah.us"
+custom_domain = true
+
 # D1 Database
 [[d1_databases]]
 binding = "DB"
