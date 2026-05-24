@@ -236,13 +236,15 @@ calls.get('/:id', async (c) => {
   }
 });
 
-// Updatable columns on calls_for_service. Anything not in this set is silently
-// dropped by PUT — prevents both "no such column" 500s when the client sends
-// fields the schema doesn't have, and column-name injection via interpolated
-// keys. Keep in sync with migrations/0001_initial.sql + 0003_calls_for_service_extended.sql.
+// Updatable columns. Anything not in either set is silently dropped by PUT —
+// prevents both "no such column" 500s when the client sends unknown fields
+// and column-name injection via interpolated keys. Split across two tables
+// because D1 caps a single table at 100 columns and the union exceeds that;
+// PSO + process-service fields live in calls_for_service_ext (1:1).
+// Keep in sync with migrations/0001_initial.sql + 0003_calls_for_service_extended.sql.
 // Immutable (never updatable): id, call_number, created_at.
-const UPDATABLE_CALL_COLUMNS = new Set<string>([
-  // base
+const UPDATABLE_CALL_COLUMNS_BASE = new Set<string>([
+  // base (0001)
   'incident_type', 'priority', 'status', 'caller_name', 'caller_phone',
   'location_address', 'property_id', 'latitude', 'longitude', 'description',
   'notes', 'source', 'assigned_unit_ids', 'unit_call_signs', 'dispatcher_id',
@@ -272,6 +274,15 @@ const UPDATABLE_CALL_COLUMNS = new Set<string>([
   'officer_safety_caution', 'k9_requested', 'ems_requested', 'fire_requested',
   'hazmat', 'gang_related', 'evidence_collected', 'body_camera_active',
   'photos_taken', 'trespass_issued', 'vehicle_pursuit', 'foot_pursuit',
+  // cross-linking
+  'case_id', 'case_number', 'client_id', 'contract_id',
+  // lifecycle
+  'previous_status', 'status_changed_at', 'archived_at', 'received_at',
+  'priority_score', 'response_time_seconds', 'onscene_duration_seconds',
+  'starting_mileage', 'ending_mileage', 'pinned', 'overdue_notified',
+]);
+
+const UPDATABLE_CALL_COLUMNS_EXT = new Set<string>([
   // PSO
   'pso_requestor_name', 'pso_requestor_phone', 'pso_requestor_email',
   'pso_service_type', 'pso_billing_code', 'pso_authorization',
@@ -280,12 +291,6 @@ const UPDATABLE_CALL_COLUMNS = new Set<string>([
   // process service
   'process_service_type', 'process_served_to', 'process_served_address',
   'process_attempts', 'process_served_at', 'process_service_result',
-  // cross-linking
-  'case_id', 'case_number', 'client_id', 'contract_id',
-  // lifecycle
-  'previous_status', 'status_changed_at', 'archived_at', 'received_at',
-  'priority_score', 'response_time_seconds', 'onscene_duration_seconds',
-  'starting_mileage', 'ending_mileage', 'pinned', 'overdue_notified',
 ]);
 
 // PUT /dispatch/calls/:id - Update call
@@ -297,25 +302,45 @@ calls.put('/:id', async (c) => {
     if (!existing) return c.json({ error: 'Call not found' }, 404);
 
     const body = await c.req.json<Record<string, unknown>>();
-    const updates: string[] = [];
-    const params: unknown[] = [];
+    const baseUpdates: string[] = [];
+    const baseParams: unknown[] = [];
+    const extUpdates: string[] = [];
+    const extParams: unknown[] = [];
     const skipped: string[] = [];
 
     for (const [key, val] of Object.entries(body)) {
-      if (!UPDATABLE_CALL_COLUMNS.has(key)) {
+      if (UPDATABLE_CALL_COLUMNS_BASE.has(key)) {
+        baseUpdates.push(`${key} = ?`);
+        baseParams.push(val ?? null);
+      } else if (UPDATABLE_CALL_COLUMNS_EXT.has(key)) {
+        extUpdates.push(`${key} = ?`);
+        extParams.push(val ?? null);
+      } else {
         skipped.push(key);
-        continue;
       }
-      updates.push(`${key} = ?`);
-      params.push(val ?? null);
     }
 
-    if (updates.length === 0) return c.json({ message: 'No changes', skipped });
-    updates.push("updated_at = datetime('now')");
-    params.push(id);
+    if (baseUpdates.length === 0 && extUpdates.length === 0) {
+      return c.json({ message: 'No changes', skipped });
+    }
 
-    await execute(db, `UPDATE calls_for_service SET ${updates.join(', ')} WHERE id = ?`, ...params);
-    const updated = await queryFirst<Record<string, unknown>>(db, 'SELECT * FROM calls_for_service WHERE id = ?', id);
+    // updated_at lives on base; bump it on any change so callers see it.
+    baseUpdates.push("updated_at = datetime('now')");
+    baseParams.push(id);
+    await execute(db, `UPDATE calls_for_service SET ${baseUpdates.join(', ')} WHERE id = ?`, ...baseParams);
+
+    if (extUpdates.length > 0) {
+      // Ext row may not exist yet (created lazily on first ext-column write).
+      await execute(db, 'INSERT OR IGNORE INTO calls_for_service_ext (id) VALUES (?)', id);
+      extParams.push(id);
+      await execute(db, `UPDATE calls_for_service_ext SET ${extUpdates.join(', ')} WHERE id = ?`, ...extParams);
+    }
+
+    const updated = await queryFirst<Record<string, unknown>>(
+      db,
+      'SELECT c.*, ext.* FROM calls_for_service c LEFT JOIN calls_for_service_ext ext ON ext.id = c.id WHERE c.id = ?',
+      id,
+    );
     return c.json(updated);
   } catch (err) {
     console.error('PUT /dispatch/calls/:id failed:', err);

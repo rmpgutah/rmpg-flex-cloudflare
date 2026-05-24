@@ -4,8 +4,10 @@
 -- The PUT /api/dispatch/calls/:id handler accepts these field names from
 -- the client and was 500ing with "no such column" until this migration.
 --
--- Apply with:
---   wrangler d1 execute rmpg-flex-db --file=migrations/0003_calls_for_service_extended.sql --remote
+-- D1 enforces a 100-column-per-table cap; calls_for_service has 24 base
+-- columns from 0001 + 71 added here = 95. The remaining 16 PSO and
+-- process-service fields live in a 1:1 side table calls_for_service_ext
+-- to stay under the cap. PUT splits writes by table; DELETE cascades.
 
 -- Geography (legacy 4-tier: sector / zone / beat)
 ALTER TABLE calls_for_service ADD COLUMN sector_id TEXT;
@@ -57,7 +59,7 @@ ALTER TABLE calls_for_service ADD COLUMN le_case_number TEXT;
 ALTER TABLE calls_for_service ADD COLUMN le_notified INTEGER DEFAULT 0;
 ALTER TABLE calls_for_service ADD COLUMN supervisor_notified INTEGER DEFAULT 0;
 
--- Boolean tactical flags (15)
+-- Boolean tactical flags
 ALTER TABLE calls_for_service ADD COLUMN injuries_reported INTEGER DEFAULT 0;
 ALTER TABLE calls_for_service ADD COLUMN alcohol_involved INTEGER DEFAULT 0;
 ALTER TABLE calls_for_service ADD COLUMN drugs_involved INTEGER DEFAULT 0;
@@ -77,26 +79,6 @@ ALTER TABLE calls_for_service ADD COLUMN photos_taken INTEGER DEFAULT 0;
 ALTER TABLE calls_for_service ADD COLUMN trespass_issued INTEGER DEFAULT 0;
 ALTER TABLE calls_for_service ADD COLUMN vehicle_pursuit INTEGER DEFAULT 0;
 ALTER TABLE calls_for_service ADD COLUMN foot_pursuit INTEGER DEFAULT 0;
-
--- PSO (private security operations) — billing + service windows
-ALTER TABLE calls_for_service ADD COLUMN pso_requestor_name TEXT;
-ALTER TABLE calls_for_service ADD COLUMN pso_requestor_phone TEXT;
-ALTER TABLE calls_for_service ADD COLUMN pso_requestor_email TEXT;
-ALTER TABLE calls_for_service ADD COLUMN pso_service_type TEXT;
-ALTER TABLE calls_for_service ADD COLUMN pso_billing_code TEXT;
-ALTER TABLE calls_for_service ADD COLUMN pso_authorization TEXT;
-ALTER TABLE calls_for_service ADD COLUMN pso_72hr_deadline TEXT;
-ALTER TABLE calls_for_service ADD COLUMN pso_72hr_notified TEXT;
-ALTER TABLE calls_for_service ADD COLUMN pso_service_windows TEXT;
-ALTER TABLE calls_for_service ADD COLUMN pso_attempt_number INTEGER DEFAULT 1;
-
--- Process service (subpoenas, summons, evictions, etc.)
-ALTER TABLE calls_for_service ADD COLUMN process_service_type TEXT;
-ALTER TABLE calls_for_service ADD COLUMN process_served_to TEXT;
-ALTER TABLE calls_for_service ADD COLUMN process_served_address TEXT;
-ALTER TABLE calls_for_service ADD COLUMN process_attempts INTEGER DEFAULT 0;
-ALTER TABLE calls_for_service ADD COLUMN process_served_at TEXT;
-ALTER TABLE calls_for_service ADD COLUMN process_service_result TEXT;
 
 -- Cross-linking
 ALTER TABLE calls_for_service ADD COLUMN case_id INTEGER;
@@ -118,7 +100,31 @@ ALTER TABLE calls_for_service ADD COLUMN ending_mileage REAL;
 ALTER TABLE calls_for_service ADD COLUMN pinned INTEGER DEFAULT 0;
 ALTER TABLE calls_for_service ADD COLUMN overdue_notified TEXT;
 
--- Indexes that show up in legacy hot paths (status + priority + zone filters).
+-- Side table for PSO + process-service fields (kept off base to stay under
+-- D1's 100-column-per-table cap). One row per call; managed by the PUT
+-- handler which INSERT-OR-IGNOREs before updating.
+CREATE TABLE IF NOT EXISTS calls_for_service_ext (
+  id INTEGER PRIMARY KEY,
+  pso_requestor_name TEXT,
+  pso_requestor_phone TEXT,
+  pso_requestor_email TEXT,
+  pso_service_type TEXT,
+  pso_billing_code TEXT,
+  pso_authorization TEXT,
+  pso_72hr_deadline TEXT,
+  pso_72hr_notified TEXT,
+  pso_service_windows TEXT,
+  pso_attempt_number INTEGER DEFAULT 1,
+  process_service_type TEXT,
+  process_served_to TEXT,
+  process_served_address TEXT,
+  process_attempts INTEGER DEFAULT 0,
+  process_served_at TEXT,
+  process_service_result TEXT,
+  FOREIGN KEY (id) REFERENCES calls_for_service(id) ON DELETE CASCADE
+);
+
+-- Indexes for legacy hot paths.
 CREATE INDEX IF NOT EXISTS idx_cfs_status ON calls_for_service(status);
 CREATE INDEX IF NOT EXISTS idx_cfs_priority ON calls_for_service(priority);
 CREATE INDEX IF NOT EXISTS idx_cfs_zone ON calls_for_service(zone_id);
