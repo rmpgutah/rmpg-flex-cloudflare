@@ -3,6 +3,11 @@ main = "src/index.ts"
 compatibility_date = "2026-05-01"
 compatibility_flags = ["nodejs_compat"]
 
+# Delete all legacy Durable Objects
+[[migrations]]
+tag = "do-cleanup"
+deleted_classes = ["AlertHubDO", "DeepResearchDO", "FlexCamRemuxDO", "PdfToolsContainer", "PersonIntelDO", "TesseractOcrDO", "TesseractOcrContainer", "VoiceHubDO", "WebBrowserSessionDO", "WelfareWatchDO"]
+
 # Custom domain. Wrangler provisions the DNS record + zone hostname
 # mapping; the zone (rmpgutah.us) must already be on this Cloudflare
 # account.
@@ -35,7 +40,9 @@ CORS_ORIGINS = "https://rmpgutah.us,https://www.rmpgutah.us,http://localhost:517
 JWT_ACCESS_EXPIRY = "15m"
 JWT_REFRESH_EXPIRY = "7d"
 SERVER_TIMEZONE = "America/Denver"
+QWEN_BASE_URL = "https://crabgrass-deferred-numbing.ngrok-free.dev/v1"
 
 # Secrets (set via `npx wrangler secret put`)
 # JWT_SECRET (already set)
+# QWEN_API_KEY
 # GOOGLE_MAPS_API_KEY

@@ -5,6 +5,8 @@ export type Bindings = {
   JWT_SECRET: string;
   CORS_ORIGINS?: string;
   PRIMARY_DOMAIN?: string;
+  QWEN_API_KEY: string;
+  QWEN_BASE_URL?: string;
 };
 
 export type Variables = {

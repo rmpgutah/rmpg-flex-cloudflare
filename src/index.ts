@@ -19,6 +19,8 @@ import properties from './routes/properties';
 import records from './routes/records';
 import mapData from './routes/mapData';
 import stubs from './routes/stubs';
+import ai from './routes/ai';
+import serveIntake from './routes/serve-intake';
 
 type Bindings = {
   DB: D1Database;
@@ -27,6 +29,8 @@ type Bindings = {
   JWT_SECRET: string;
   CORS_ORIGINS?: string;
   PRIMARY_DOMAIN?: string;
+  QWEN_API_KEY: string;
+  QWEN_BASE_URL?: string;
 };
 
 const app = new Hono<{ Bindings: Bindings; Variables: { user: { id: number; username: string; role: string; full_name: string }; userId: number } }>();
@@ -65,6 +69,10 @@ app.use('/api/presence', authMiddleware);
 app.use('/api/presence/*', authMiddleware);
 app.use('/api/records', authMiddleware);
 app.use('/api/records/*', authMiddleware);
+app.use('/api/ai', authMiddleware);
+app.use('/api/ai/*', authMiddleware);
+app.use('/api/serve-intake', authMiddleware);
+app.use('/api/serve-intake/*', authMiddleware);
 
 app.route('/api/dispatch/calls', dispatchCalls);
 app.route('/api/dispatch/units', dispatchUnits);
@@ -76,6 +84,8 @@ app.route('/api/personnel', personnel);
 app.route('/api/presence', presence);
 app.route('/api/records/properties', properties);
 app.route('/api/records', records);
+app.route('/api/ai', ai);
+app.route('/api/serve-intake', serveIntake);
 
 // Stub endpoints for dashboard/feature compatibility
 app.use('/api/user/*', authMiddleware);

@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
 import { getDb, query, queryFirst, execute } from '../../utils/db';
 import { authMiddleware, requireRole } from '../../middleware/auth';
+import { generateDescription, summarizeNotes } from '../../services/ai';
 
 const calls = new Hono<Env>();
 
@@ -466,6 +467,65 @@ calls.post('/:id/dispatch', async (c) => {
 
     return c.json({ message: 'Units dispatched' });
   } catch (err) { return c.json({ error: 'Dispatch failed' }, 500); }
+});
+
+// POST /dispatch/calls/:id/ai-description - AI-generate description for existing call
+calls.post('/:id/ai-description', async (c) => {
+  try {
+    const db = getDb(c.env);
+    const id = c.req.param('id');
+    const call = await queryFirst<Record<string, unknown>>(db, 'SELECT * FROM calls_for_service WHERE id = ?', id);
+    if (!call) return c.json({ error: 'Call not found' }, 404);
+    if (!c.env.QWEN_API_KEY) return c.json({ error: 'AI service not configured' }, 503);
+
+    const description = await generateDescription(c.env.QWEN_API_KEY, {
+      incident_type: String(call.incident_type || ''),
+      priority: String(call.priority || 'P3'),
+      location_address: String(call.location_address || ''),
+      caller_name: String(call.caller_name || ''),
+      dispatch_code: String(call.dispatch_code || ''),
+      property_name: String(call.property_name || ''),
+      subject_description: String(call.subject_description || ''),
+      vehicle_description: String(call.vehicle_description || ''),
+      weapons_involved: String(call.weapons_involved || ''),
+      notes: String(call.notes || ''),
+    }, c.env.QWEN_BASE_URL);
+
+    await execute(db, "UPDATE calls_for_service SET description = ?, updated_at = datetime('now') WHERE id = ?", description, id);
+    const updated = await queryFirst<Record<string, unknown>>(db, 'SELECT * FROM calls_for_service WHERE id = ?', id);
+    return c.json({ ai_description: description, call: updated });
+  } catch (err) {
+    console.error('AI description error:', err);
+    return c.json({ error: 'Failed to generate description' }, 500);
+  }
+});
+
+// POST /dispatch/calls/:id/ai-summary - AI-summarize notes for existing call
+calls.post('/:id/ai-summary', async (c) => {
+  try {
+    const db = getDb(c.env);
+    const id = c.req.param('id');
+    const call = await queryFirst<Record<string, unknown>>(db, 'SELECT * FROM calls_for_service WHERE id = ?', id);
+    if (!call) return c.json({ error: 'Call not found' }, 404);
+    if (!c.env.QWEN_API_KEY) return c.json({ error: 'AI service not configured' }, 503);
+
+    const notes = String(call.notes || '');
+    if (!notes.trim()) return c.json({ error: 'No notes to summarize' }, 400);
+
+    const summary = await summarizeNotes(c.env.QWEN_API_KEY, notes, {
+      incident_type: String(call.incident_type || ''),
+      call_number: String(call.call_number || ''),
+    }, c.env.QWEN_BASE_URL);
+
+    // Append summary to notes
+    const updatedNotes = notes + '\n\n--- AI Summary ---\n' + summary;
+    await execute(db, "UPDATE calls_for_service SET notes = ?, updated_at = datetime('now') WHERE id = ?", updatedNotes, id);
+
+    return c.json({ ai_summary: summary });
+  } catch (err) {
+    console.error('AI summary error:', err);
+    return c.json({ error: 'Failed to summarize notes' }, 500);
+  }
 });
 
 export default calls;
